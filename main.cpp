@@ -19,6 +19,13 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
+static __inline__ unsigned long long rdtsc(void)
+{
+  unsigned hi, lo;
+  __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+  return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
+}
+
 int main(int argc, char** argv)
 {
   FeedHandler feed;
@@ -37,27 +44,29 @@ int main(int argc, char** argv)
 
   using namespace boost::accumulators;
   std::size_t index_ = 100000;
-  boost::accumulators::accumulator_set<int, Features> latencies(tag::tail<right>::cache_size = index_);
+  boost::accumulators::accumulator_set<uint64_t, Features> latencies(tag::tail<right>::cache_size = index_);
 
   while (getline(infile, line))
   {
-    auto now = std::chrono::system_clock::now();
+    auto now = rdtsc();
     feed.processMessage(line);
-    auto end = std::chrono::system_clock::now();
+    auto end = rdtsc();
 
     auto diff = end - now;
-    latencies(diff.count());
+    latencies(diff);
 
     counter++;
 
+#if 0
     if (counter % 10 == 0) {
       feed.printCurrentOrderBook(std::cout);
     }
+#endif
   }
 
-  std::cout << "Min latency:    " << boost::accumulators::min(latencies)    << std::endl;
-  std::cout << "Max latency:    " << boost::accumulators::max(latencies)    << std::endl;
-  std::cout << "Mean latency:   " << boost::accumulators::mean(latencies)   << std::endl;
+  std::cout << "Min latency:  " << boost::accumulators::min(latencies)    << std::endl;
+  std::cout << "Max latency:  " << boost::accumulators::max(latencies)    << std::endl;
+  std::cout << "Mean latency: " << boost::accumulators::mean(latencies)   << std::endl;
 
   std::cout << "Quantile .01: " << boost::accumulators::quantile(latencies, quantile_probability = 0.01) << std::endl;
   std::cout << "Quantile .05: " << boost::accumulators::quantile(latencies, quantile_probability = 0.05) << std::endl;
